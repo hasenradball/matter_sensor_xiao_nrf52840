@@ -12,28 +12,28 @@ struct k_timer;
 
 class AppTask {
 public:
-	static AppTask &Instance()
-	{
-		static AppTask sAppTask;
-		return sAppTask;
-	};
+   static AppTask &Instance()
+   {
+      static AppTask sAppTask;
+      return sAppTask;
+   };
 
-	CHIP_ERROR StartApp();
+   CHIP_ERROR StartApp();
 
-	void UpdateClustersState();
+   void UpdateClustersState();
 
 private:
-	CHIP_ERROR Init();
+   CHIP_ERROR Init();
 
-	static void MatterEventHandler(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg);
+   static void MatterEventHandler(const chip::DeviceLayer::ChipDeviceEvent *event, intptr_t arg);
 
-	static void MeasurementsTimerHandler();
+   static void MeasurementsTimerHandler();
 
-	void UpdateTemperatureClusterState();
+   void UpdateTemperatureClusterState();
 
-	void UpdateHumidityClusterState();
+   void UpdateHumidityClusterState();
 #ifdef CONFIG_FUEL_GAUGE
-	void UpdateBatteryClusterState();
+   void UpdateBatteryClusterState();
 #endif
 
 };

@@ -8,14 +8,15 @@ This is the code for the Matter Temperature and Humidity sensor I build over on 
 * Adafruit MAX17048 Lipo Fuel Gauge (I2C Addr: 0x36)
 
 ## Pin Mapping
-The default I2C pins on the xiao have been remapped so that the clock and data pins (SCL and SDA) are next to the GND and 3V3 pins for convenience
+![](assets/images/xiao_nrf52840_pinmap.png)<br>
+The default I2C pins on the xiao have been remapped, so that the clock and data pins (SCL and SDA) are next to the GND and 3V3 pins for convenience.
 
 |Xiao nrf52840|SHT4X|MAX17048|
 |-|-|-|
 |GND|GND|GND|
 |3V3|VIN|VIN|
-|D10 (P1.15)|SDA|SDA|
-|D10 (P1.14)|SCL|SCL|
+|D10 (P1.15)|SCL|SCL|
+|D9  (P1.14)|SDA|SDA|
 
 ## Build
 
