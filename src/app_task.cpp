@@ -17,11 +17,6 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
 
-#ifdef CONFIG_FUEL_GAUGE
-#include <zephyr/drivers/fuel_gauge.h>
-#endif
-
-
 #include <app-common/zap-generated/attributes/Accessors.h>
 
 #include <cmath>
@@ -56,11 +51,6 @@ namespace {
    bool sIsMeasurementTimerStarted = false;
 
    const device *sht4x_dev = DEVICE_DT_GET_ONE(sensirion_sht4x);
-
-#ifdef CONFIG_FUEL_GAUGE
-   constexpr uint8_t kPowerSourceEndpointId = 0;
-   const device *max17048_dev = DEVICE_DT_GET_ONE(maxim_max17048);
-#endif
 
 
 } //namespace
@@ -159,90 +149,7 @@ void AppTask::UpdateHumidityClusterState()
       LOG_ERR("Getting humidity measurement data from SHT4x failed with: %d", result);
    }
 }
-#ifdef CONFIG_FUEL_GAUGE
-void AppTask::UpdateBatteryClusterState()
-{
-   union fuel_gauge_prop_val val_pct;
-   union fuel_gauge_prop_val val_volt;
-   union fuel_gauge_prop_val val_runtime_full; // NEW: Changed variable name
-   Protocols::InteractionModel::Status status;
 
-   // 1. Get Battery Percentage
-   int rc = fuel_gauge_get_prop(max17048_dev, FUEL_GAUGE_RELATIVE_STATE_OF_CHARGE, &val_pct);
-
-   if (rc == 0) {
-      // Driver gives 0-100 (val_pct.relative_state_of_charge)
-      // Matter spec (BatPercentRemaining) is 0-200 (in 0.5% units)
-      uint8_t matter_pct = static_cast<uint8_t>(val_pct.relative_state_of_charge * 2);
-
-      LOG_DBG("New battery percentage: %d%%, attribute value: %d", val_pct.relative_state_of_charge, matter_pct);
-
-      status = Clusters::PowerSource::Attributes::BatPercentRemaining::Set(kPowerSourceEndpointId, matter_pct);
-      if (status != Protocols::InteractionModel::Status::Success) {
-         LOG_ERR("Updating BatPercentRemaining failed: %x", to_underlying(status));
-      }
-   } else {
-      LOG_ERR("Getting battery percentage failed with: %d", rc);
-      // Set to "unknown" (0xFF) on failure
-      status = Clusters::PowerSource::Attributes::BatPercentRemaining::Set(kPowerSourceEndpointId, 0xFF);
-      if (status != Protocols::InteractionModel::Status::Success) {
-         LOG_ERR("Setting BatPercentRemaining to 'unknown' failed: %x", to_underlying(status));
-      }
-   }
-
-   // 2. Get Battery Voltage
-   rc = fuel_gauge_get_prop(max17048_dev, FUEL_GAUGE_VOLTAGE, &val_volt);
-   if (rc == 0) {
-      // Driver gives uV. Matter attribute (BatVoltage) is in mV.
-      uint32_t matter_volt_mv = val_volt.voltage / 1000;
-      LOG_DBG("New battery voltage: %u uV, attribute value: %u mV", val_volt.voltage, matter_volt_mv);
-
-      status = Clusters::PowerSource::Attributes::BatVoltage::Set(kPowerSourceEndpointId, matter_volt_mv);
-      if (status != Protocols::InteractionModel::Status::Success) {
-         LOG_ERR("Updating BatVoltage failed: %x", to_underlying(status));
-      }
-   } else {
-      LOG_ERR("Getting battery voltage failed with: %d", rc);
-      // Set to "unknown" (0xFFFFFFFF) on failure
-      status = Clusters::PowerSource::Attributes::BatVoltage::Set(kPowerSourceEndpointId, 0xFFFFFFFF);
-      if (status != Protocols::InteractionModel::Status::Success) {
-         LOG_ERR("Setting BatVoltage to 'unknown' failed: %x", to_underlying(status));
-      }
-   }
-
-   // 3. Get Charging State
-   // The driver returns 'true' if charging
-   rc = fuel_gauge_get_prop(max17048_dev, FUEL_GAUGE_RUNTIME_TO_FULL, &val_runtime_full);
-   if (rc == 0) {
-      Clusters::PowerSource::BatChargeStateEnum charge_state;
-
-      if (val_runtime_full.runtime_to_full > 0) {
-         // If time to full is > 0, we are charging
-         charge_state = Clusters::PowerSource::BatChargeStateEnum::kIsCharging;
-      } else {
-         // Otherwise, we are not charging (or are full)
-         charge_state = Clusters::PowerSource::BatChargeStateEnum::kIsNotCharging;
-      }
-      // NOTE: This driver doesn't seem to have a "battery full" state.
-      // kNotCharging is the best fit for discharging or full.
-
-      LOG_DBG("New battery runtime to full: %d, attribute value: %d", val_runtime_full.runtime_to_full, (uint8_t)charge_state);
-      status = Clusters::PowerSource::Attributes::BatChargeState::Set(kPowerSourceEndpointId, charge_state);
-      if (status != Protocols::InteractionModel::Status::Success) {
-         LOG_ERR("Updating BatChargeState failed: %x", to_underlying(status));
-      }
-
-   } else {
-      LOG_ERR("Getting battery runtime to full failed with: %d", rc);
-      // Set to "unknown" (0x03) on failure
-      status = Clusters::PowerSource::Attributes::BatChargeState::Set(kPowerSourceEndpointId,
-                              Clusters::PowerSource::BatChargeStateEnum::kUnknown);
-      if (status != Protocols::InteractionModel::Status::Success) {
-         LOG_ERR("Setting BatChargeState to 'unknown' failed: %x", to_underlying(status));
-      }
-   }
-}
-#endif
 
 void AppTask::MeasurementsTimerHandler()
 {
@@ -261,9 +168,6 @@ void AppTask::UpdateClustersState()
    } else {
       LOG_ERR("Fetching data from SHT4X sensor failed with: %d", result_bme);
    }
-#ifdef CONFIG_FUEL_GAUGE
-   UpdateBatteryClusterState();
-#endif
 }
 
 CHIP_ERROR AppTask::Init()
