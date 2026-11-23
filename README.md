@@ -35,6 +35,9 @@ The default I2C pins on the xiao have been remapped, so that the clock and data 
 2. Open the project in VS code and create a new build configuration. Change the following settings:
     * **Board Target**: xiao_ble/nrf52840 (toggle to "Nordic SOC" for this to be visible)
     * **System Build (sysbuild)**: No sysbuild
+    
+   ![Build Configuration](assets/images/build_configuration.png)
+
 3. Click **Generate and Build** to compile the firmware
 
 ## Flash
