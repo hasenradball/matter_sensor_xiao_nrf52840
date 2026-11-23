@@ -21,12 +21,6 @@
          zephyr,code = <INPUT_KEY_2>;
       };
 
-      button3: button_3 {
-         gpios = <&xiao_d 6 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
-         label = "Push button switch 3";
-         zephyr,code = <INPUT_KEY_3>;
-      };
-
    };
 };
 

@@ -2,6 +2,17 @@
 
 This is the code for the Matter Temperature and Humidity sensor I build over on my YT Channel. Code is built on the Seeed Studio Xiao nrf52840 using the nrf Connect Sdk
 
+## Contents
+* [Components](#components)
+* [Pin Mapping](#pin-mapping)
+* [Build the Software](#build)
+* [Flash Procedure](#flash)
+* [Commisioning](#commissioning)
+* [Modifications](#modifications)
+   * [Measurement cycle](#temperature-and-humidity-reading-frequency)
+   * [Fueal Gauge](#remove-lipo-fuel-gauge)
+
+
 ## Components
 * Seeed Studio Xiao nrf52840
 * Sensirion SHT41 (I2C Addr: 0x44) (Any SH4X model will work)
@@ -39,10 +50,10 @@ Set this up like any other matter device. You can use either the default pairing
 ## Modifications
 
 ### Temperature and Humidity Reading Frequency
-This project is configured to report temperature and humidity every 5 minutes. To change the frequency modify the following line in `src/app_task.cpp`. Value is in milliseconds.
+This project is configured to report temperature and humidity every 1 minutes. To change the frequency modify the following parameter `kMeasurementsIntervalMs` in `src/app_task.cpp`. Value is in milliseconds.
 
 ```cpp
-constexpr size_t kMeasurementsIntervalMs = 300000;
+constexpr size_t kMeasurementsIntervalMs = 60000;
 ```
 
 ### Remove LIPO Fuel Gauge

@@ -16,10 +16,13 @@
 
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/uart.h>
+#include <zephyr/sys/util.h>
 
 #include <app-common/zap-generated/attributes/Accessors.h>
 
 #include <cmath>
+#include <cstdlib>
 
 LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
 
@@ -28,8 +31,8 @@ using namespace ::chip::app;
 using namespace ::chip::DeviceLayer;
 
 namespace {
-   // Set the measurement interval.
-   constexpr size_t kMeasurementsIntervalMs = 300000; // 5 Minutes
+   // Set the measurement interval to 60 s
+   constexpr size_t kMeasurementsIntervalMs = 60000;
 
    // Endpoint and attribute constants for Temperature Measurement
    constexpr uint8_t kTemperatureMeasurementEndpointId = 1;
@@ -51,9 +54,35 @@ namespace {
    bool sIsMeasurementTimerStarted = false;
 
    const device *sht4x_dev = DEVICE_DT_GET_ONE(sensirion_sht4x);
-
+   const device *sensor_uart_dev = DEVICE_DT_GET(DT_NODELABEL(uart0));
+   int16_t sTemperatureHundredths = 0;
+   uint16_t sHumidityHundredths = 0;
+   bool sTemperatureAvailable = false;
+   bool sHumidityAvailable = false;
 
 } //namespace
+
+void SendSensorDataOverUart()
+{
+   if (!sTemperatureAvailable || !sHumidityAvailable) {
+      return;
+   }
+
+   char line[40];
+   const char *temperatureSign = sTemperatureHundredths < 0 ? "-" : "";
+   const int temperatureWhole = abs(sTemperatureHundredths / 100);
+   const int temperatureFraction = abs(sTemperatureHundredths % 100);
+   const int temperatureLength =
+      snprintk(line, sizeof(line), "%s%d.%02d,%u.%02d\r\n",
+         temperatureSign, temperatureWhole, temperatureFraction,
+         sHumidityHundredths / 100, sHumidityHundredths % 100);
+
+   if (temperatureLength > 0) {
+      for (int i = 0; i < temperatureLength; ++i) {
+         uart_poll_out(sensor_uart_dev, line[i]);
+      }
+   }
+}
 
 void AppTask::MatterEventHandler(const ChipDeviceEvent *event, intptr_t arg)
 {
@@ -96,6 +125,8 @@ void AppTask::UpdateTemperatureClusterState()
          newValue = kTemperatureMeasurementAttributeInvalidValue;
       }
       const int16_t matterValue = static_cast<int16_t>(newValue);
+      sTemperatureHundredths = matterValue;
+      sTemperatureAvailable = true;
       LOG_DBG("New temperature measurement: %d.%06d *C, rounded attribute value: %d", sTemperature.val1,
          sTemperature.val2, matterValue);
 
@@ -104,6 +135,7 @@ void AppTask::UpdateTemperatureClusterState()
          LOG_ERR("Updating temperature measurement failed: %x", to_underlying(status));
       }
    } else {
+      sTemperatureAvailable = false;
       LOG_ERR("Getting temperature measurement data from SHT4x failed with: %d", result);
    }
 }
@@ -137,6 +169,8 @@ void AppTask::UpdateHumidityClusterState()
          clampedHumidityHundredths = kHumidityMeasurementAttributeMaxValue;
       }
       const uint16_t matterValue = static_cast<uint16_t>(clampedHumidityHundredths);
+      sHumidityHundredths = matterValue;
+      sHumidityAvailable = true;
 
       LOG_DBG("New humidity measurement: %d.%06d %%RH, Matter attribute value: %u", sHumidity.val1, sHumidity.val2,
          static_cast<unsigned int>(matterValue));
@@ -146,6 +180,7 @@ void AppTask::UpdateHumidityClusterState()
          LOG_ERR("Updating humidity measurement failed: %x", to_underlying(status));
       }
    } else {
+      sHumidityAvailable = false;
       LOG_ERR("Getting humidity measurement data from SHT4x failed with: %d", result);
    }
 }
@@ -165,6 +200,7 @@ void AppTask::UpdateClustersState()
       // Update both clusters with the new data.
       UpdateTemperatureClusterState();
       UpdateHumidityClusterState();
+      SendSensorDataOverUart();
    } else {
       LOG_ERR("Fetching data from SHT4X sensor failed with: %d", result_bme);
    }
@@ -190,16 +226,20 @@ CHIP_ERROR AppTask::Init()
       LOG_ERR("SHT4X sensor device not ready");
       return chip::System::MapErrorZephyr(-ENODEV);
    }
+   if (!device_is_ready(sensor_uart_dev)) {
+      LOG_ERR("UART sensor interface not ready");
+      return CHIP_ERROR_INCORRECT_STATE;
+   }
 
    k_timer_init(&sMeasurementsTimer, [](k_timer *) { Nrf::PostTask([] { MeasurementsTimerHandler(); }); }, nullptr);
 
    ReturnErrorOnFailure(Nrf::Matter::StartServer());
 
-   // On reboot, if the device is already commissioned, start the timer directly.
-   if (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0 && !sIsMeasurementTimerStarted) {
-      LOG_INF("Device is already commissioned on boot, starting measurements.");
-      // Use K_NO_WAIT to get an immediate reading on reboot.
-      k_timer_start(&sMeasurementsTimer, K_NO_WAIT, K_MSEC(kMeasurementsIntervalMs));
+   // Start measurements on boot so UART output does not depend on Matter commissioning.
+   if (!sIsMeasurementTimerStarted) {
+      LOG_INF("Starting periodic measurements.");
+      Nrf::PostTask([] { Instance().UpdateClustersState(); });
+      k_timer_start(&sMeasurementsTimer, K_MSEC(kMeasurementsIntervalMs), K_MSEC(kMeasurementsIntervalMs));
       sIsMeasurementTimerStarted = true;
    }
 
